@@ -3,17 +3,6 @@
 # Exit on error
 set -e
 
-# Get the name of the file and the expected pattern
-file="$1"
-directory="$2"
-pattern="^planet-([0-9]{6})\.osm.pbf$"
-
-# Give up now if the file isn't a database dump
-[[ $file =~ $pattern ]] || exit 0
-
-year="$(date +'%Y')"
-date="${BASH_REMATCH[1]}"
-
 # Check the lock
 if [ -f /tmp/planetilerdump.lock ]; then
     if [ "$(ps -p `cat /tmp/planetilerdump.lock` | wc -l)" -gt 1 ]; then
@@ -53,41 +42,62 @@ function cleanup {
 # Remove lock on exit
 trap cleanup EXIT
 
-# Change to working directory
-cd /store/planetilerdump
+# Get the name of the file and the expected pattern
+file_name="$1"
+file_path="$2"
+pattern="^planet-([0-9]{6})\.osm.pbf$"
 
-# Make directory to put outpul files
-mkdir -p $year
+echo "Download File: $file_name - $file_path"
+
+# Give up now if the file isn't a database dump
+[[ $file_name =~ $pattern ]] || exit 0
+
+year="$(date +'%Y')"
+date="${BASH_REMATCH[1]}"
+
+# Change to working directory
+cd /store/planetiler
 
 # Cleanup
-rm -rf data
+#rm -rf data
 
-# Run the dump
+file_name_mbtiles=planetiler-$date.mbtiles
+echo "Starting planetiler mbtiles export: $file_name_mbtiles"
+
+# Run the mbtiles dump
 time java -Xmx25g \
   -jar /opt/planetiler/planetiler_0.6.0.jar \
-  `# Download the latest planet.osm.pbf from s3://osm-pds bucket` \
-  --area=planet --bounds=planet --download --osm-path=$directory/$file\
-  `# Accelerate the download by fetching the 10 1GB chunks at a time in parallel` \
+  --area=planet --bounds=planet --download --osm-path=$file_path \
   --download-threads=10 --download-chunk-size-mb=1000 \
-  `# Also download name translations from wikidata` \
   --fetch-wikidata \
-  --output=planetiler-$date.mbtiles \
-  `# Store temporary node locations at fixed positions in a memory-mapped file` \
+  --output=$file_name_mbtiles --force \
   --nodemap-type=array --storage=mmap
+
+#file_name_pmtiles=planetiler-$date.pmtiles
+#echo "Starting planetiler pmtiles export: $file_name_pmtiles"
+
+# Run the pmtiles dump
+#time java -Xmx25g \
+#  -jar /opt/planetiler/planetiler_0.6.0.jar \
+#  --area=planet --bounds=planet --download --osm-path=$file_path \
+#  --download-threads=10 --download-chunk-size-mb=1000 \
+#  --fetch-wikidata \
+#  --output=$file_name_pmtiles --force \
+#  --nodemap-type=array --storage=mmap
 
 # Function to create bittorrent files
 function mk_torrent {
   type="$1"
   format="$2"
-  dir="$3"
-  s_year="$4"
-  web_dir="${dir}${s_year}"
+  rss_dir="$3"
+  upload_dir="$4"
   name="${type}-${date}.${format}"
-  web_path="${web_dir}/${name}"
-  rss_web_dir="https://planetiler.techidiots.net/${dir}"
+  rss_web_dir="https://planetgen.wifidb.net/${rss_dir}"
   rss_file="${type}-${format}-rss.xml"
   torrent_file="${name}.torrent"
+  torrent_path="${rss_dir}${name}.torrent"
   torrent_url="${rss_web_dir}${s_year}/${torrent_file}"
+  upload_path="${upload_dir}${name}.torrent"
 
   # create .torrent file
   mktorrent -l 22 "${name}" \
@@ -96,13 +106,16 @@ function mk_torrent {
      -a udp://tracker.torrent.eu.org:451 \
      -a udp://tracker-udp.gbitt.info:80/announce,http://tracker.gbitt.info/announce,https://tracker.gbitt.info/announce \
      -a http://retracker.local/announce \
-     -w "https://planetiler.techidiots.net/${web_path}" \
      -c "Planetiler ${type} data export ${name}" \
-     -o "${torrent_file}" > /dev/null
+     -o "${torrent_path}" > /dev/null
 
-  # create .xml global RSS headers if missing
-  torrent_time_rfc="$(date -R -r ${torrent_file})"
-  test -f "${rss_file}" || echo "<x/>" | xmlstarlet select --xml-decl --indent \
+  if [ -f "$torrent_path" ]; then
+	# copy torrent to qbittorent upload dir
+	cp $torrent_path $upload_path
+
+	# create .xml global RSS headers if missing
+	torrent_time_rfc="$(date -R -r ${torrent_file})"
+	test -f "${rss_file}" || echo "<x/>" | xmlstarlet select --xml-decl --indent \
 	-N "atom=http://www.w3.org/2005/Atom" \
 	-N "dcterms=http://purl.org/dc/terms/" \
 	-N "content=http://purl.org/rss/1.0/modules/content/" \
@@ -127,9 +140,9 @@ function mk_torrent {
 	--elem "lastBuildDate" --output "${torrent_time_rfc}" \
 	> "${rss_file}"
 
-  # add newly created .torrent file as new entry to .xml RSS feed, removing excess entries
-  torrent_size="$(stat --format="%s" ${torrent_file})"
-  xmlstarlet edit --inplace \
+	# add newly created .torrent file as new entry to .xml RSS feed, removing excess entries
+	torrent_size="$(stat --format="%s" ${torrent_file})"
+	xmlstarlet edit --inplace \
 	-a "//lastBuildDate" -t elem -n item -v ""  \
 	-s "//item[1]" -t elem -n "title" -v "${torrent_file}" \
 	-s "//item[1]" -t elem -n "guid" -v "${torrent_url}" \
@@ -145,6 +158,9 @@ function mk_torrent {
 	-d /rss/@atom:DUMMY \
 	-d "//item[position()>5]" \
 	"${rss_file}"
+  fi
+  
+
 }
 
 # Function to install a dump in place
@@ -168,11 +184,12 @@ function install_dump {
 }
 
 # Create *.torrent files
-
-mk_torrent "planetiler" "mbtiles" "planetiler" "${year}"
+echo "Creating Torrents"
+mk_torrent "planetiler" "mbtiles" "/store/rss/" "/store/upload"
+#mk_torrent "planetiler" "pmtiles" "/store/rss/" "/store/upload"
 
 # Move dumps into place
-install_dump "planetiler" "mbtiles" "/store/http/" "${year}"
+#install_dump "planetiler" "mbtiles" "/store/http/" "${year}"
 
 # Remove pbf dumps older than 90 days
 find /store/http/ \
