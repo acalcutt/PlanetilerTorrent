@@ -59,24 +59,20 @@ date="${BASH_REMATCH[1]}"
 cd /store/planetiler
 
 # Cleanup
-#rm -rf data
+rm -rf data
 
-file_name_mbtiles=planetiler-$date.mbtiles
-echo "Starting planetiler mbtiles export: $file_name_mbtiles"
-
-# Run the mbtiles dump
+# Run the mbtiles export
+echo "Starting planetiler mbtiles export"
 time java -Xmx25g \
   -jar /opt/planetiler/planetiler_0.6.0.jar \
   --area=planet --bounds=planet --download --osm-path=$file_path \
   --download-threads=10 --download-chunk-size-mb=1000 \
   --fetch-wikidata \
-  --output=$file_name_mbtiles --force \
+  --output=planetiler-$date.mbtiles --force \
   --nodemap-type=array --storage=mmap
 
-#file_name_pmtiles=planetiler-$date.pmtiles
-#echo "Starting planetiler pmtiles export: $file_name_pmtiles"
-
-# Run the pmtiles dump
+# Run the pmtiles export
+#echo "Starting planetiler pmtiles export"
 #time java -Xmx25g \
 #  -jar /opt/planetiler/planetiler_0.6.0.jar \
 #  --area=planet --bounds=planet --download --osm-path=$file_path \
@@ -97,7 +93,7 @@ function mk_torrent {
   torrent_file="${name}.torrent"
   torrent_path="${rss_dir}${name}.torrent"
   torrent_url="${rss_web_dir}${s_year}/${torrent_file}"
-  upload_path="${upload_dir}${name}.torrent"
+  upload_path="${upload_dir}/${name}.torrent"
 
   # create .torrent file
   mktorrent -l 22 "${name}" \
