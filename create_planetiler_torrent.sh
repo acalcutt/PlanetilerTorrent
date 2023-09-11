@@ -3,8 +3,16 @@
 # Exit on error
 set -e
 
+# Get the name of the file and the expected pattern
+file="$1"
+directory="$2"
+pattern="^planet-([0-9]{6})\.osm.pbf$"
+
+# Give up now if the file isn't a database dump
+[[ $file =~ $pattern ]] || exit 0
+
 year="$(date +'%Y')"
-date="$(date +'%Y%m%d')"
+date="${BASH_REMATCH[1]}"
 
 # Check the lock
 if [ -f /tmp/planetilerdump.lock ]; then
@@ -58,7 +66,7 @@ rm -rf data
 time java -Xmx25g \
   -jar /opt/planetiler/planetiler_0.6.0.jar \
   `# Download the latest planet.osm.pbf from s3://osm-pds bucket` \
-  --area=planet --bounds=planet --download \
+  --area=planet --bounds=planet --download --osm-path=$directory/$file\
   `# Accelerate the download by fetching the 10 1GB chunks at a time in parallel` \
   --download-threads=10 --download-chunk-size-mb=1000 \
   `# Also download name translations from wikidata` \
