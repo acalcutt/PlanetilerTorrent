@@ -6,6 +6,7 @@ set -e
 # Get the name of the file and the expected pattern
 file_name="$1"
 file_path="$2"
+file_hash="$3"
 pattern="^planet-([0-9]{6})\.osm.pbf$"
 
 # Give up now if the file isn't a database dump
@@ -59,12 +60,12 @@ function mk_planetiler {
   osm_path="$3"
 
   echo "Starting ${type} ${format} export"
-  time java -Xmx25g \
+  time java -Xmx24g \
     -jar /opt/planetiler/planetiler_0.6.0.jar \
     --area=planet --bounds=planet --download --osm-path=${osm_path} \
     --download-threads=10 --download-chunk-size-mb=1000 \
     --fetch-wikidata \
-    --output=${type}-${date}.${format} \
+    --output=${type}-${date}.${format} --force \
     --nodemap-type=array --storage=mmap
 }
 
@@ -152,32 +153,32 @@ function mk_torrent {
     -s "//item[1]" -t elem -n "description" -v "${type} ${format} torrent ${date}" \
     -u /rss/channel/lastBuildDate -v "${torrent_time_rfc}" \
     -d /rss/@atom:DUMMY \
-    -d "//item[position()>5]" \
+    -d "//item[position()>4]" \
     "${rss_path}"
   fi
   
 
 }
 
-echo "Download File: $file_name - $file_path"
+echo "Download File: $file_name - $file_path - $file_hash"
 
 # Change to working directory
 cd /store/planetiler
 
 # Cleanup
-rm -rf data
+#rm -rf data
 
 # Create mbtiles export and torrent
 mk_planetiler "planetiler" "mbtiles" ${file_path}
 mk_torrent "planetiler" "mbtiles" "/store/http" "/store/upload"
 
-# Create p,tiles export and torrent
+# Create pmtiles export and torrent
 mk_planetiler "planetiler" "pmtiles" ${file_path}
 mk_torrent "planetiler" "pmtiles" "/store/http" "/store/upload"
 
-# Remove exports older than 15 days
+# Remove exports older than 35 days
 find /store/ \
-     -maxdepth 4 -mindepth 1 -type f -mtime +15 \
+     -maxdepth 4 -mindepth 1 -type f -mtime +35 \
      \( \
      -iname 'planetiler-*.mbtiles' \
      -o -iname 'planetiler-*.mbtiles.md5' \
@@ -187,3 +188,6 @@ find /store/ \
      -o -iname 'planetiler-*.pmtiles.torrent' \
      \) \
      -delete
+
+#cleanup planet torrent
+#/opt/create_planet/cleanup_torrent.sh $file_hash 
