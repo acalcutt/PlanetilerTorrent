@@ -3,6 +3,17 @@
 # Exit on error
 set -e
 
+# Get the name of the file and the expected pattern
+file_name="$1"
+file_path="$2"
+pattern="^planet-([0-9]{6})\.osm.pbf$"
+
+# Give up now if the file isn't a database dump
+[[ $file_name =~ $pattern ]] || exit 0
+
+year="$(date +'%Y')"
+date="${BASH_REMATCH[1]}"
+
 # Check the lock
 if [ -f /tmp/planetilerdump.lock ]; then
     if [ "$(ps -p `cat /tmp/planetilerdump.lock` | wc -l)" -gt 1 ]; then
@@ -148,24 +159,13 @@ function mk_torrent {
 
 }
 
-# Get the name of the file and the expected pattern
-file_name="$1"
-file_path="$2"
-pattern="^planet-([0-9]{6})\.osm.pbf$"
-
 echo "Download File: $file_name - $file_path"
-
-# Give up now if the file isn't a database dump
-[[ $file_name =~ $pattern ]] || exit 0
-
-year="$(date +'%Y')"
-date="${BASH_REMATCH[1]}"
 
 # Change to working directory
 cd /store/planetiler
 
 # Cleanup
-#rm -rf data
+rm -rf data
 
 # Create mbtiles export and torrent
 mk_planetiler "planetiler" "mbtiles" ${file_path}
@@ -179,11 +179,11 @@ mk_torrent "planetiler" "pmtiles" "/store/http" "/store/upload"
 find /store/ \
      -maxdepth 4 -mindepth 1 -type f -mtime +15 \
      \( \
-     -iname 'planetiler-*.mbtiles.torrent' \
+     -iname 'planetiler-*.mbtiles' \
      -o -iname 'planetiler-*.mbtiles.md5' \
-     -o -iname 'planetiler-*.pmtiles.torrent' \
-     -o -iname 'planetiler-*.pmtiles.md5' \
-     -o -iname 'planetiler-*.mbtiles' \
+     -o -iname 'planetiler-*.mbtiles.torrent' \
      -o -iname 'planetiler-*.pmtiles' \
+     -o -iname 'planetiler-*.pmtiles.md5' \
+     -o -iname 'planetiler-*.pmtiles.torrent' \
      \) \
      -delete
