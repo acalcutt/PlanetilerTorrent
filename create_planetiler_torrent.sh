@@ -23,26 +23,61 @@ exec > "${logfile}" 2>&1
 # Create lock file
 echo $$ > /tmp/planetilerdump.lock
 
+# Define cleanup function
+function cleanup {
+    # Remove the lock file
+    rm /tmp/planetilerdump.lock
+
+    # Send an email with the output, since incron doesn't yet
+    # support doing this in the incrontab
+    if [[ -s "$logfile" ]]
+    then
+        mailx -s "Planetiler output: ${file}" acalcutt@techidiots.net < "${logfile}"
+    fi
+
+    # Remove the log file
+    rm -f "${logfile}"
+}
+
+# Remove lock on exit
+trap cleanup EXIT
+
+function mk_planetiler {
+  type="$1"
+  format="$2"
+  osm_path="$3"
+
+  echo "Starting ${type} ${format} export"
+  time java -Xmx25g \
+    -jar /opt/planetiler/planetiler_0.6.0.jar \
+    --area=planet --bounds=planet --download --osm-path=${osm_path} \
+    --download-threads=10 --download-chunk-size-mb=1000 \
+    --fetch-wikidata \
+    --output=${type}-${date}.${format} \
+    --nodemap-type=array --storage=mmap
+}
+
 # Function to create bittorrent files
 function mk_torrent {
   type="$1"
   format="$2"
   http_dir="$3"
   upload_dir="$4"
-  name="$type-$date.$format"
   http_web_dir="https://planetgen.wifidb.net"
-  rss_file="$type-$format-rss.xml"
-  rss_path="$http_dir/$rss_file"
-  torrent_name="$name.torrent"
-  torrent_dir="$http_dir/$type/$format"
-  torrent_path="$torrent_dir/$torrent_name"
-  torrent_url="$http_web_dir/$type/$format/$torrent_name"
-  upload_path="$upload_dir/$torrent_name"
+  name="${type}-${date}.${format}"
+  rss_name="${type}-${format}-rss.xml"
+  rss_path="${http_dir}/${rss_name}"
+  torrent_name="${name}.torrent"
+  torrent_dir="${http_dir}/${type}/${format}"
+  torrent_path="${torrent_dir}/${torrent_name}"
+  torrent_url="${http_web_dir}/${type}/${format}/${torrent_name}"
+  latest_path="${torrent_dir}/${type}-latest.${format}.torrent"
+  upload_path="${upload_dir}/${torrent_name}"
 
   # create .torrent file
   echo "Creating Torrent $torrent_name"
   mkdir -p $torrent_dir
-  mktorrent -l 22 "${name}" \
+  mktorrent -l 24 "${name}" \
      -a udp://tracker.opentrackr.org:1337 \
      -a udp://tracker.datacenterlight.ch:6969/announce,http://tracker.datacenterlight.ch:6969/announce \
      -a udp://tracker.torrent.eu.org:451 \
@@ -59,8 +94,11 @@ function mk_torrent {
     # copy torrent to qbittorent upload dir
     cp $torrent_path $upload_path
 
+    # create latest symbolic link
+    ln -sfn $torrent_path $latest_path
+
     # create .xml global RSS headers if missing
-    echo "Creating RSS $rss_file"
+    echo "Creating RSS $rss_name"
     torrent_time_rfc="$(date -R -r ${torrent_path})"
     test -f "${rss_path}" || echo "<x/>" | xmlstarlet select --xml-decl --indent \
     -N "atom=http://www.w3.org/2005/Atom" \
@@ -76,7 +114,7 @@ function mk_torrent {
     --elem "title" --output "${type} ${format} torrent RSS" --break \
     --elem "link"  --output "${http_web_dir}" --break \
     --elem "atom:link" \
-        --attr "href" --output "${http_web_dir}/${rss_file}" --break \
+        --attr "href" --output "${http_web_dir}/${rss_name}" --break \
         --attr "rel" --output "self" --break \
         --attr "type" --output "application/rss+xml" --break \
         --break \
@@ -110,25 +148,6 @@ function mk_torrent {
 
 }
 
-# Define cleanup function
-function cleanup {
-    # Remove the lock file
-    rm /tmp/planetilerdump.lock
-
-    # Send an email with the output, since incron doesn't yet
-    # support doing this in the incrontab
-    if [[ -s "$logfile" ]]
-    then
-        mailx -s "Planetiler output: ${file}" acalcutt@techidiots.net < "${logfile}"
-    fi
-
-    # Remove the log file
-    rm -f "${logfile}"
-}
-
-# Remove lock on exit
-trap cleanup EXIT
-
 # Get the name of the file and the expected pattern
 file_name="$1"
 file_path="$2"
@@ -146,41 +165,25 @@ date="${BASH_REMATCH[1]}"
 cd /store/planetiler
 
 # Cleanup
-rm -rf data
+#rm -rf data
 
-# Run the mbtiles export
-echo "Starting planetiler mbtiles export"
-time java -Xmx25g \
-  -jar /opt/planetiler/planetiler_0.6.0.jar \
-  --area=planet --bounds=planet --download --osm-path=$file_path \
-  --download-threads=10 --download-chunk-size-mb=1000 \
-  --fetch-wikidata \
-  --output=planetiler-$date.mbtiles --force \
-  --nodemap-type=array --storage=mmap
-
-# Create mbtiles torrent files
+# Create mbtiles export and torrent
+mk_planetiler "planetiler" "mbtiles" ${file_path}
 mk_torrent "planetiler" "mbtiles" "/store/http" "/store/upload"
 
-# Run the pmtiles export
-echo "Starting planetiler pmtiles export"
-time java -Xmx25g \
-  -jar /opt/planetiler/planetiler_0.6.0.jar \
-  --area=planet --bounds=planet --download --osm-path=$file_path \
-  --download-threads=10 --download-chunk-size-mb=1000 \
-  --fetch-wikidata \
-  --output=planetiler-$date.pmtiles --force \
-  --nodemap-type=array --storage=mmap
-
-# Create pmtiles torrent files
+# Create p,tiles export and torrent
+mk_planetiler "planetiler" "pmtiles" ${file_path}
 mk_torrent "planetiler" "pmtiles" "/store/http" "/store/upload"
 
-# Remove exports older than 60 days
-find /store/http/ \
-     -maxdepth 3 -mindepth 1 -type f -mtime +60 \
+# Remove exports older than 15 days
+find /store/ \
+     -maxdepth 4 -mindepth 1 -type f -mtime +15 \
      \( \
      -iname 'planetiler-*.mbtiles.torrent' \
      -o -iname 'planetiler-*.mbtiles.md5' \
      -o -iname 'planetiler-*.pmtiles.torrent' \
      -o -iname 'planetiler-*.pmtiles.md5' \
+     -o -iname 'planetiler-*.mbtiles' \
+     -o -iname 'planetiler-*.pmtiles' \
      \) \
      -delete
