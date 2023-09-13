@@ -65,7 +65,7 @@ function mk_planetiler {
     --area=planet --bounds=planet --download --osm-path=${osm_path} \
     --download-threads=10 --download-chunk-size-mb=1000 \
     --fetch-wikidata \
-    --output=${type}-${date}.${format} --force \
+    --output=${type}-${date}.${format} \
     --nodemap-type=array --storage=mmap
 }
 
@@ -83,12 +83,10 @@ function mk_torrent {
   torrent_dir="${http_dir}/${type}/${format}"
   torrent_path="${torrent_dir}/${torrent_name}"
   torrent_url="${http_web_dir}/${type}/${format}/${torrent_name}"
-  latest_path="${torrent_dir}/${type}-latest.${format}.torrent"
-  upload_path="${upload_dir}/${torrent_name}"
 
   # create .torrent file
   echo "Creating Torrent $torrent_name"
-  mkdir -p $torrent_dir
+  mkdir -p ${torrent_dir}
   mktorrent -l 24 "${name}" \
      -a udp://tracker.opentrackr.org:1337 \
      -a udp://tracker.datacenterlight.ch:6969/announce,http://tracker.datacenterlight.ch:6969/announce \
@@ -100,14 +98,19 @@ function mk_torrent {
 
   if [ -f "$torrent_path" ]; then
     # create md5 of original file
-	echo "Creating MD5 of $name"
-    md5sum "${name}" > "${torrent_dir}/${name}.md5"
+    echo "Creating MD5 of $name"
+    md5_path="${torrent_dir}/${name}.md5"
+    md5sum "${name}" > ${md5_path}
 
     # copy torrent to qbittorent upload dir
-    cp $torrent_path $upload_path
+    autoseed_path="${upload_dir}/${torrent_name}"
+    cp ${torrent_path} ${autoseed_path}
 
     # create latest symbolic link
-    ln -sfn $torrent_path $latest_path
+    latest_path="${torrent_dir}/${type}-latest.${format}.torrent"
+    latest_md5="${torrent_dir}/${type}-latest.${format}.md5"
+    ln -sfn ${torrent_path} ${latest_path}
+    ln -sfn ${md5_path} ${latest_md5}
 
     # create .xml global RSS headers if missing
     echo "Creating RSS $rss_name"
@@ -166,7 +169,7 @@ echo "Download File: $file_name - $file_path - $file_hash"
 cd /store/planetiler
 
 # Cleanup
-#rm -rf data
+rm -rf data
 
 # Create mbtiles export and torrent
 mk_planetiler "planetiler" "mbtiles" ${file_path}
@@ -190,4 +193,4 @@ find /store/ \
      -delete
 
 #cleanup planet torrent
-#/opt/create_planet/cleanup_torrent.sh $file_hash 
+/opt/create_planet/cleanup_torrent.sh $file_hash
