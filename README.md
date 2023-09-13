@@ -5,7 +5,9 @@ a script to generate planetiler torrents. This is meant to be triggered on OpenS
 
 1. Install qbittorent. I followerd this quide https://pimylifeup.com/ubuntu-qbittorrent/
 
-2. create local paths used by the script
+2. Download planetiler ( https://github.com/onthegomap/planetiler ) jar file. The script expects 'planetiler_0.6.0.jar' to '/opt/planetiler'. Note that planetiler requires java 17+ installed, which I installed with 'apt install openjdk-17-jdk openjdk-17-jre'
+
+3. create local paths used by the script
 
 ```
 /opt/PlanetilerTorrent (script files in this repo)
@@ -15,15 +17,15 @@ a script to generate planetiler torrents. This is meant to be triggered on OpenS
 /store/upload/ (a folder that qbittorent monitors for automatic import)
 ```
 
-3.  Give the folders inside /store write permissions to the qbittorent group created when setting up qbittorent
+4.  Give the folders inside /store write permissions to the qbittorent group created when setting up qbittorent
 
-4. In qbittorent, set up this script.
+5. In qbittorent, set up this script.
    - In (Options -> Download -> Run external program on torrent completion)
         add '/opt/PlanetilerTorrent/create_planetiler_torrent.sh %N %F %I' . This will run when torrent files finish, and pass on filename, path, and hash variables to the script.
    - In (Options -> Download -> Automatically add torrents from) 
         add '/store/upload' as a monitor foler and '/store/planetiler/' as save location. When a torrent is added to this '/store/upload' folder, it will automatically import into qbittorent. Since the file will already exist in '/store/planetiler/' the file will start seeding. The script places torrent files in this folder as they are created.
 
-5. Set up OpenStreetMap planet pbf rss feed in qbittorent.
+6. Set up OpenStreetMap planet pbf rss feed in qbittorent.
    - In the qbittorrent web ui, go to the 'RSS' tab and click 'New Subscription'
         add the osm rss feed ( https://planet.openstreetmap.org/pbf/planet-pbf-rss.xml ), click OK
    - Go back to the 'Transfers' tab and right click 'All' under 'CATEGORIES' in the left menu. Select 'Add Category'.
@@ -31,7 +33,9 @@ a script to generate planetiler torrents. This is meant to be triggered on OpenS
    - In (Options -> RSS -> RSS Torrent Auto Downloader -> Edit auto downloading rules)
         click the button to create a new rule. Set Category as 'planet'. Apply the rule to RSS feed you added earlier. Click Save
 
-6. Optional
+7. Optional
    - Create a firewal rule to allow TCP/UTP connections to the port listed on (Options -> Connection -> Listening port). my understanding is this is not neccesary, but will improe seeding.
    - Set up speed restricions in (Options -> Speed)
+
+Once this has set up, OpenStreet
         
