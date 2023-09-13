@@ -36,6 +36,7 @@ a script to generate planetiler torrents. This is meant to be triggered on OpenS
 7. Optional
    - Create a firewal rule to allow TCP/UTP connections to the port listed on (Options -> Connection -> Listening port). my understanding is this is not neccesary, but will improe seeding.
    - Set up speed restricions in (Options -> Speed)
+   - As an alternative to seeding by qbittorrent, you can also modify the mktorrent command in the create_planetiler_torrent.sh script to specify "web seeds" with the -w [url] flag. the files would need to be accessable by http at the url specified in the -w flag. This allows seeding without a torrent server. (I chose to seed through torrent for better bandwith control and cleanup option, but seeding by http like this is also an option)
 
 Once this has set up, OpenStreet
         
