@@ -5,7 +5,7 @@ a script to generate planetiler torrents. This is meant to be triggered on OpenS
 
 1. Install qbittorent. I followerd this quide https://pimylifeup.com/ubuntu-qbittorrent/
 
-2. Download the planetiler jar file ( https://github.com/onthegomap/planetiler ). The script expects 'planetiler_0.6.0.jar' to '/opt/planetiler'. Note that planetiler requires java 17+ installed, which I installed with 'apt install openjdk-17-jdk openjdk-17-jre'
+2. Download the planetiler jar file ( https://github.com/onthegomap/planetiler ). The script expects 'planetiler.jar' to '/opt/planetiler'. Note that planetiler requires java 17+ installed, which I installed with 'apt install openjdk-17-jdk openjdk-17-jre'
 
 3. create local paths used by the script
    - /opt/PlanetilerTorrent (script files in this repo)

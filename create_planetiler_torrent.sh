@@ -61,7 +61,7 @@ function mk_planetiler {
 
   echo "Starting ${type} ${format} export"
   time java -Xmx24g \
-    -jar /opt/planetiler/planetiler_0.6.0.jar \
+    -jar /opt/planetiler/planetiler.jar \
     --area=planet --bounds=planet --download --osm-path=${osm_path} \
     --download-threads=10 --download-chunk-size-mb=1000 \
     --fetch-wikidata \
