@@ -58,15 +58,22 @@ function mk_planetiler {
   type="$1"
   format="$2"
   osm_path="$3"
+  outfile=${type}-${date}.${format}
+  latestfile="${type}-latest.${format}"
 
   echo "Starting ${type} ${format} export"
-  time java -Xmx24g \
-    -jar /opt/planetiler/planetiler.jar \
+  time java -Xmx32g \
+    -jar /opt/planetiler/planetiler_0.6.0.jar \
     --area=planet --bounds=planet --download --osm-path=${osm_path} \
     --download-threads=10 --download-chunk-size-mb=1000 \
     --fetch-wikidata \
-    --output=${type}-${date}.${format} \
+    --output=${outfile} \
     --nodemap-type=array --storage=mmap
+
+  if [ -f "${outfile}" ]; then
+    ln -sfn ${outfile} ${latestfile}
+  fi
+
 }
 
 # Function to create bittorrent files
@@ -100,7 +107,7 @@ function mk_torrent {
     # create md5 of original file
     echo "Creating MD5 of $name"
     md5_path="${torrent_dir}/${name}.md5"
-    md5sum "${name}" > ${md5_path}
+    md5sum "${name}" | cut -f 1 -d " " > ${md5_path}
 
     # copy torrent to qbittorent upload dir
     autoseed_path="${upload_dir}/${torrent_name}"
@@ -171,13 +178,13 @@ cd /store/planetiler
 # Cleanup
 rm -rf data
 
-# Create mbtiles export and torrent
-mk_planetiler "planetiler" "mbtiles" ${file_path}
-mk_torrent "planetiler" "mbtiles" "/store/http" "/store/upload"
-
 # Create pmtiles export and torrent
 mk_planetiler "planetiler" "pmtiles" ${file_path}
 mk_torrent "planetiler" "pmtiles" "/store/http" "/store/upload"
+
+# Create mbtiles export and torrent
+mk_planetiler "planetiler" "mbtiles" ${file_path}
+mk_torrent "planetiler" "mbtiles" "/store/http" "/store/upload"
 
 # Remove exports older than 35 days
 find /store/ \
