@@ -3,6 +3,13 @@
 # Exit on error
 set -e
 
+planetiler_protomaps_path="/opt/protomaps/tiles/target/protomaps-basemap-HEAD-with-deps.jar" #path to planetiler with protomaps profile support.
+planetiler_openmaptiles_path="/opt/planetiler/planetiler_0.6.0.jar" #path to planetiler with openmaptiles profile support.
+working_dir="/store/planetiler" #directory where temp files get created.
+outfile_dir="/mnt/usb" #directory that panetiler will output the pmtiles/mbtiles files it creates
+http_dir="/store/http" #directory where the torrent files and rss files get created
+torrent_autoupload_dir="/store/upload_usb" #directory where a copy of the torrent file gets placed to start autouploading in qbittorent
+
 # Get the name of the file and the expected pattern
 file_name="$1"
 file_path="$2"
@@ -54,16 +61,17 @@ function cleanup {
 # Remove lock on exit
 trap cleanup EXIT
 
-function mk_planetiler {
+function mk_openmaptiles {
   type="$1"
   format="$2"
   osm_path="$3"
-  outfile=${type}-${date}.${format}
-  latestfile="${type}-latest.${format}"
+  dest="$4"
+  outfile="${dest}/${type}-${date}.${format}"
+  latestfile="${dest}/${type}-latest.${format}"
 
   echo "Starting ${type} ${format} export"
   time java -Xmx32g \
-    -jar /opt/planetiler/planetiler_0.6.0.jar \
+    -jar ${planetiler_openmaptiles_path} \
     --area=planet --bounds=planet --download --osm-path=${osm_path} \
     --download-threads=10 --download-chunk-size-mb=1000 \
     --fetch-wikidata \
@@ -76,12 +84,40 @@ function mk_planetiler {
 
 }
 
+function mk_protomaps {
+  type="$1"
+  format="$2"
+  osm_path="$3"
+  dest="$4"
+  outfile="${dest}/${type}-${date}.${format}"
+  latestfile="${dest}/${type}-latest.${format}"
+
+  echo "Starting ${type} ${format} export"
+  time java -Xmx32g \
+    -jar ${planetiler_protomaps_path} \
+    --area=planet --bounds=planet --download --osm-path=${osm_path} \
+    --download-threads=10 --download-chunk-size-mb=1000 \
+    --fetch-wikidata \
+    --output=${outfile} \
+    --nodemap-type=array --storage=mmap \
+	--archive_attribution='<a href="https://www.openstreetmap.org/copyright" target="_blank">&copy; OpenStreetMap contributors</a> | <a href="https://github.com/protomaps/basemaps" target="_blank">Protomaps</a>'
+
+  if [ -f "${outfile}" ]; then
+    ln -sfn ${outfile} ${latestfile}
+  fi
+
+}
+
+
 # Function to create bittorrent files
 function mk_torrent {
   type="$1"
   format="$2"
-  http_dir="$3"
-  upload_dir="$4"
+  source_dir="$3"
+  http_dir="$4"
+  upload_dir="$5"
+  copyright="$6"
+  infile="${source_dir}/${type}-${date}.${format}"
   http_web_dir="https://planetgen.wifidb.net"
   name="${type}-${date}.${format}"
   rss_name="${type}-${format}-rss.xml"
@@ -92,9 +128,9 @@ function mk_torrent {
   torrent_url="${http_web_dir}/${type}/${format}/${torrent_name}"
 
   # create .torrent file
-  echo "Creating Torrent $torrent_name"
+  echo "Creating Torrent $torrent_name from $infile"
   mkdir -p ${torrent_dir}
-  mktorrent -l 24 "${name}" \
+  mktorrent -l 24 "${infile}" \
      -a udp://tracker.opentrackr.org:1337 \
      -a udp://tracker.datacenterlight.ch:6969/announce,http://tracker.datacenterlight.ch:6969/announce \
      -a udp://tracker.torrent.eu.org:451 \
@@ -105,9 +141,9 @@ function mk_torrent {
 
   if [ -f "$torrent_path" ]; then
     # create md5 of original file
-    echo "Creating MD5 of $name"
+    echo "Creating MD5 of $infile"
     md5_path="${torrent_dir}/${name}.md5"
-    md5sum "${name}" | cut -f 1 -d " " > ${md5_path}
+    md5sum "${infile}" | cut -f 1 -d " " > ${md5_path}
 
     # copy torrent to qbittorent upload dir
     autoseed_path="${upload_dir}/${torrent_name}"
@@ -141,8 +177,8 @@ function mk_torrent {
         --attr "type" --output "application/rss+xml" --break \
         --break \
     --elem "description" --output "${type} ${format} torrent RSS feed" --break \
-    --elem "copyright" --output "OpenStreetMap contributors, under ODbL 1.0 licence. OpenMapTiles under BSD 3-Clause License/CC-BY 4.0" --break \
-    --elem "generator" --output "wifidb.net planetiler shell script v1.0" --break \
+    --elem "copyright" --output "${copyright}" --break \
+    --elem "generator" --output "planetgen.wifidb.net shell script v1.0" --break \
     --elem "language" --output "en" --break \
     --elem "lastBuildDate" --output "${torrent_time_rfc}" \
     > "${rss_path}"
@@ -170,32 +206,47 @@ function mk_torrent {
 
 }
 
-echo "Download File: $file_name - $file_path - $file_hash"
+echo "Download File: $file_name $file_path $file_hash"
 
 # Change to working directory
-cd /store/planetiler
+cd ${working_dir}
 
 # Cleanup
 rm -rf data
 
-# Create pmtiles export and torrent
-mk_planetiler "planetiler" "pmtiles" ${file_path}
-mk_torrent "planetiler" "pmtiles" "/store/http" "/store/upload"
+# Create openmaptiles pmtiles export and torrent
+mk_openmaptiles "planetiler-openmaptiles" "pmtiles" ${file_path} ${outfile_dir}
+mk_torrent "planetiler-openmaptiles" "pmtiles" ${outfile_dir} ${http_dir} ${torrent_autoupload_dir} "OpenStreetMap contributors, under ODbL 1.0 licence. OpenMapTiles under BSD 3-Clause License/CC-BY 4.0"
 
-# Create mbtiles export and torrent
-mk_planetiler "planetiler" "mbtiles" ${file_path}
-mk_torrent "planetiler" "mbtiles" "/store/http" "/store/upload"
+# Create openmaptiles mbtiles export and torrent
+mk_openmaptiles "planetiler-openmaptiles" "mbtiles" ${file_path} ${outfile_dir}
+mk_torrent "planetiler-openmaptiles" "mbtiles" ${outfile_dir} ${http_dir} ${torrent_autoupload_dir} "OpenStreetMap contributors, under ODbL 1.0 licence. OpenMapTiles under BSD 3-Clause License/CC-BY 4.0"
 
-# Remove exports older than 35 days
-find /store/ \
+# Create protomaps pmtiles export and torrent
+mk_protomaps "planetiler-protomaps" "pmtiles" ${file_path} ${outfile_dir}
+mk_torrent "planetiler-protomaps" "pmtiles" ${outfile_dir} ${http_dir} ${torrent_autoupload_dir} "OpenStreetMap contributors, under ODbL 1.0 licence. Protomaps under Creative Commons Zero (CC0) license"
+
+# Create protomaps mbtiles export and torrent
+mk_protomaps "planetiler-protomaps" "mbtiles" ${file_path} ${outfile_dir}
+mk_torrent "planetiler-protomaps" "mbtiles" ${outfile_dir} ${http_dir} ${torrent_autoupload_dir} "OpenStreetMap contributors, under ODbL 1.0 licence. Protomaps under Creative Commons Zero (CC0) license"
+
+# Remove torrent files older than 35 days
+find ${http_dir} \
+     -maxdepth 4 -mindepth 1 -type f -mtime +35 \
+     \( \
+     -iname 'planetiler-*.mbtiles.md5' \
+     -o -iname 'planetiler-*.mbtiles.torrent' \
+     -o -iname 'planetiler-*.pmtiles.md5' \
+     -o -iname 'planetiler-*.pmtiles.torrent' \
+     \) \
+     -delete
+
+# Remove export files older than 35 days
+find ${outfile_dir} \
      -maxdepth 4 -mindepth 1 -type f -mtime +35 \
      \( \
      -iname 'planetiler-*.mbtiles' \
-     -o -iname 'planetiler-*.mbtiles.md5' \
-     -o -iname 'planetiler-*.mbtiles.torrent' \
      -o -iname 'planetiler-*.pmtiles' \
-     -o -iname 'planetiler-*.pmtiles.md5' \
-     -o -iname 'planetiler-*.pmtiles.torrent' \
      \) \
      -delete
 
