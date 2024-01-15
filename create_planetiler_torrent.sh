@@ -99,8 +99,7 @@ function mk_protomaps {
     --download-threads=10 --download-chunk-size-mb=1000 \
     --fetch-wikidata \
     --output=${outfile} \
-    --nodemap-type=array --storage=mmap \
-	--archive_attribution='<a href="https://www.openstreetmap.org/copyright" target="_blank">&copy; OpenStreetMap contributors</a> | <a href="https://github.com/protomaps/basemaps" target="_blank">Protomaps</a>'
+    --nodemap-type=array --storage=mmap
 
   if [ -f "${outfile}" ]; then
     ln -sfn ${outfile} ${latestfile}
@@ -120,7 +119,7 @@ function mk_torrent {
   infile="${source_dir}/${type}-${date}.${format}"
   http_web_dir="https://planetgen.wifidb.net"
   name="${type}-${date}.${format}"
-  rss_name="${type}-${format}-rss.xml"
+  rss_name="rss-${type}-${format}.xml"
   rss_path="${http_dir}/${rss_name}"
   torrent_name="${name}.torrent"
   torrent_dir="${http_dir}/${type}/${format}"
@@ -199,7 +198,7 @@ function mk_torrent {
     -s "//item[1]" -t elem -n "description" -v "${type} ${format} torrent ${date}" \
     -u /rss/channel/lastBuildDate -v "${torrent_time_rfc}" \
     -d /rss/@atom:DUMMY \
-    -d "//item[position()>4]" \
+    -d "//item[position()>1]" \
     "${rss_path}"
   fi
   
@@ -232,7 +231,7 @@ mk_torrent "planetiler-protomaps" "mbtiles" ${outfile_dir} ${http_dir} ${torrent
 
 # Remove torrent files older than 35 days
 find ${http_dir} \
-     -maxdepth 4 -mindepth 1 -type f -mtime +35 \
+     -maxdepth 4 -mindepth 1 -type f -mtime +15 \
      \( \
      -iname 'planetiler-*.mbtiles.md5' \
      -o -iname 'planetiler-*.mbtiles.torrent' \
@@ -243,7 +242,7 @@ find ${http_dir} \
 
 # Remove export files older than 35 days
 find ${outfile_dir} \
-     -maxdepth 4 -mindepth 1 -type f -mtime +35 \
+     -maxdepth 4 -mindepth 1 -type f -mtime +15 \
      \( \
      -iname 'planetiler-*.mbtiles' \
      -o -iname 'planetiler-*.pmtiles' \
